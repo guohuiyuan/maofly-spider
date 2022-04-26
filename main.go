@@ -5,7 +5,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
-	"golang.org/x/net/html"
 	"io"
 	"net/url"
 	"os"
@@ -18,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/net/html"
 
 	"github.com/FloatTech/zbputils/binary"
 	"github.com/FloatTech/zbputils/file"
@@ -120,7 +121,6 @@ func main() {
 	}
 	fmt.Println("压缩的文件名:", zipName)
 	_ = os.RemoveAll(title)
-
 }
 
 type chapter struct {
