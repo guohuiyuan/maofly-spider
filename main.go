@@ -4,8 +4,10 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path"
@@ -25,7 +27,6 @@ import (
 	"github.com/FloatTech/zbputils/web"
 	lzstring "github.com/Lazarus/lz-string-go"
 	"github.com/antchfx/htmlquery"
-	"github.com/wdvxdr1123/ZeroBot/message"
 )
 
 var (
@@ -38,6 +39,8 @@ var (
 	waitGroup     sync.WaitGroup
 	files         = make([]string, 0, 32)
 	ua            = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36"
+	authority     = "mao.mhtupian.com"
+	referer       = "https://www.maofly.com/"
 	unDownloadURL string
 )
 
@@ -50,11 +53,11 @@ func main() {
 
 	var keyword string
 	fmt.Println("请输入漫画名：")
-	_, _ = fmt.Scanln(&keyword)
-	// keyword = "露出导演"
+	// _, _ = fmt.Scanln(&keyword)
+	keyword = "露出导演"
 	text, comic := search(keyword)
 	if len(comic) == 0 {
-		fmt.Println(message.Text("没有找到与", keyword, "有关的漫画"))
+		fmt.Println("没有找到与", keyword, "有关的漫画")
 		return
 	}
 	text += "\n"
@@ -64,16 +67,16 @@ func main() {
 	text += "请输入下载的漫画序号:"
 	fmt.Println(text)
 	var num int
-	_, _ = fmt.Scanln(&num)
-	// num = 0
+	// _, _ = fmt.Scanln(&num)
+	num = 0
 	indexURL := comic[num].href
 	title, c, err := getChapter(indexURL)
 	if err != nil {
-		fmt.Println(message.Text("ERROR:", err))
+		fmt.Println("ERROR:", err)
 		return
 	}
 	if len(c) == 0 {
-		fmt.Println(message.Text(title, "已下架"))
+		fmt.Println(title, "已下架")
 		return
 	}
 	zipName := dbpath + title + ".zip"
@@ -81,7 +84,7 @@ func main() {
 		err := unzip(zipName, ".")
 		if err != nil {
 			_ = os.RemoveAll(title)
-			fmt.Println(message.Text("ERROR:", err))
+			fmt.Println("ERROR:", err)
 			return
 		}
 	} else {
@@ -116,11 +119,12 @@ func main() {
 
 	if err := zipFiles(zipName, files); err != nil {
 		_ = os.RemoveAll(title)
-		fmt.Println(message.Text("ERROR:", err))
+		fmt.Println("ERROR:", err)
 		return
 	}
 	fmt.Println("压缩的文件名:", zipName)
 	_ = os.RemoveAll(title)
+	time.Sleep(2 * time.Second)
 }
 
 type chapter struct {
@@ -148,7 +152,7 @@ type a struct {
 
 func search(key string) (text string, al []a) {
 	requestURL := searchURL + url.QueryEscape(key)
-	data, err := web.RequestDataWith(web.NewDefaultClient(), requestURL, "GET", "", ua)
+	data, err := web.RequestDataWith(web.NewDefaultClient(), requestURL, "GET", referer, ua)
 	if err != nil {
 		fmt.Println("[maofly]", err)
 		return
@@ -173,7 +177,7 @@ func search(key string) (text string, al []a) {
 }
 
 func getChapter(indexURL string) (title string, c chapterSlice, err error) {
-	data, err := web.RequestDataWith(web.NewDefaultClient(), indexURL, "GET", "", ua)
+	data, err := web.RequestDataWith(web.NewDefaultClient(), indexURL, "GET", referer, ua)
 	if err != nil {
 		return
 	}
@@ -203,11 +207,11 @@ func getChapter(indexURL string) (title string, c chapterSlice, err error) {
 
 func getImgs(title string, index int, c chapter) {
 	var data []byte
-	data, err := web.RequestDataWith(web.NewDefaultClient(), c.href, "GET", "", ua)
+	data, err := web.RequestDataWith(web.NewDefaultClient(), c.href, "GET", referer, ua)
 	for i := 1; err != nil && i <= 10; i++ {
-		fmt.Println("[maofly]", err, ",", i, "s后重试")
+		fmt.Println("[maofly]请求", c.href, "时出现", err, ",", i, "s后重试")
 		time.Sleep(time.Duration(i) * time.Second)
-		data, err = web.RequestDataWith(web.NewDefaultClient(), c.href, "GET", "", ua)
+		data, err = web.RequestDataWith(web.NewDefaultClient(), c.href, "GET", referer, ua)
 		if i == 10 {
 			fmt.Println("[maofly]章节不完整,请重新下载")
 			os.Exit(1)
@@ -236,7 +240,7 @@ func downloadFile() {
 			files = append(files, filePath)
 			continue
 		}
-		data, err := web.RequestDataWith(web.NewDefaultClient(), fileURL, "GET", "", ua)
+		data, err := myRequestDataWith(web.NewDefaultClient(), fileURL, "GET", referer, ua, authority)
 		if err != nil {
 			unDownloadURL += fileURL + "\n"
 			data = binary.StringToBytes(fileURL)
@@ -331,4 +335,34 @@ func unzip(zipFile string, destDir string) error {
 		}
 	}
 	return nil
+}
+
+func myRequestDataWith(client *http.Client, url, method, referer, ua, authority string) (data []byte, err error) {
+	// 提交请求
+	var request *http.Request
+	request, err = http.NewRequest(method, url, nil)
+	if err == nil {
+		// 增加header选项
+		if referer != "" {
+			request.Header.Add("Referer", referer)
+		}
+		if ua != "" {
+			request.Header.Add("User-Agent", ua)
+		}
+		if authority != "" {
+			request.Header.Add("Authority", authority)
+		}
+		var response *http.Response
+		response, err = client.Do(request)
+		if err == nil {
+			if response.StatusCode != http.StatusOK {
+				s := fmt.Sprintf("status code: %d", response.StatusCode)
+				err = errors.New(s)
+				return
+			}
+			data, err = io.ReadAll(response.Body)
+			response.Body.Close()
+		}
+	}
+	return
 }
