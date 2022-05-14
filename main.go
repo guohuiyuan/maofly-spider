@@ -53,8 +53,8 @@ func main() {
 
 	var keyword string
 	fmt.Println("请输入漫画名：")
-	// _, _ = fmt.Scanln(&keyword)
-	keyword = "露出导演"
+	_, _ = fmt.Scanln(&keyword)
+	// keyword = "露出导演"
 	text, comic := search(keyword)
 	if len(comic) == 0 {
 		fmt.Println("没有找到与", keyword, "有关的漫画")
@@ -67,8 +67,8 @@ func main() {
 	text += "请输入下载的漫画序号:"
 	fmt.Println(text)
 	var num int
-	// _, _ = fmt.Scanln(&num)
-	num = 0
+	_, _ = fmt.Scanln(&num)
+	// num = 0
 	indexURL := comic[num].href
 	title, c, err := getChapter(indexURL)
 	if err != nil {
